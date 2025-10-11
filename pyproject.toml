@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "imindlabs-voice-assistant"
+version = "1.0.0"
+description = "Langgraph based Interlligent caller agent who could able to autonomosly schedule appointments by looking at client calendar on a request"
+authors = ["IMindLabs Team <devs@imindlabs.com.au>"]
+readme = "README.md"
+[[tool.poetry.packages]]
+include = "app"
+
+[tool.poetry.dependencies]
+python = ">=3.11,<4.0"
+uvicorn = "^0.37.0"
+fastapi = "^0.118.3"
+websockets = "^15.0.1"
+google-cloud-speech = "^2.33.0"
+google-cloud-texttospeech = "^2.31.0"
+langgraph = "^0.6.10"
+langchain = "^0.3.27"
+langchain-google = "^0.1.1"
+python-multipart = "^0.0.20"
+langchain-core = "^0.3.79"
+langsmith = "^0.4.34"
+python-jwt = "^4.1.0"
+google-api-python-client = "^2.184.0"
+langchain-google-genai = "^2.1.12"
+
+[tool.poetry.group.dev.dependencies]
+pytest-dotenv = "^0.5.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+

@@ -8,7 +8,10 @@ from app.agent_builder.agent import graph
 from app.utils.speech_utils import text_to_speech
 from app.voice_manager.audio_stream_manager import AudioStreamManager
 
-
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s :: %(levelname)s :: %(name)s :: %(message)s'
+)
 logger = logging.getLogger(__name__)
 router = APIRouter()
 

@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 from logging import getLogger
 from app.routes import voice_route
@@ -5,6 +6,10 @@ from app.routes import voice_route
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s :: %(levelname)s :: %(name)s :: %(message)s'
+)
 logger = getLogger(__name__)
 
 def on_server_startup():

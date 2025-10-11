@@ -10,6 +10,10 @@ from langchain_core.tools import tool
 from googleapiclient.discovery import build, HttpError
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s :: %(levelname)s :: %(name)s :: %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 memory = InMemorySaver()

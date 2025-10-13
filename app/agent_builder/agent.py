@@ -1,14 +1,15 @@
 import logging
 from typing import Annotated, List, TypedDict
+from datetime import datetime, timedelta, timezone
 from langchain.prompts import MessagesPlaceholder
-from langchain.schema import HumanMessage
+from langchain.schema import HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langchain.chat_models import init_chat_model
 from langgraph.graph import StateGraph, START, add_messages, END
 from langgraph.prebuilt import ToolNode, tool_node, tools_condition
 from langchain_core.tools import tool
 from googleapiclient.discovery import build, HttpError
-from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,13 +53,15 @@ def check_calendar_availability(date_and_time: str, duration_minutes: int = 30) 
     """
     try:
         logger.info(f"Checking calendar availability for {date_and_time}")
-        service = build("calendar", "v3")
+        service = build("calendar", "v3", cache_discovery=False)
+        start_time_dt = datetime.fromisoformat(date_and_time)
+        end_time_dt = start_time_dt + timedelta(minutes=duration_minutes)
         event_result = (
             service.events()
             .list(
                 calendarId="primary",
-                timeMin=date_and_time,
-                timeMax=f"{date_and_time[:-6]}{int(date_and_time[-5:-3]) + (duration_minutes // 60):02}:{(int(date_and_time[-2:]) + (duration_minutes % 60)) % 60:02}Z",
+                timeMin=start_time_dt.isoformat() + "Z",
+                timeMax=end_time_dt.isoformat() + "Z",
                 singleEvents=True,
                 orderBy="startTime",
             )
@@ -98,7 +101,7 @@ def get_events_for_date(date: str) -> List[Event]:
     """
     try:
         logger.info(f"Fetching events for date: {date}")
-        service = build("calendar", "v3")
+        service = build("calendar", "v3", cache_discovery=False)
         time_min = f"{date}T00:00:00Z"
         time_max = f"{date}T23:59:59Z"
 
@@ -154,13 +157,15 @@ def create_event_for_datetime(date_and_time: str, title: str, description: str, 
     """
     try:
         logger.info(f"Creating event '{title}' at {date_and_time}")
-        service = build("calendar", "v3")
+        service = build("calendar", "v3", cache_discovery=False)
+        start_time_dt = datetime.fromisoformat(date_and_time)
+        end_time_dt = start_time_dt + timedelta(minutes=duration_minutes)
         event = {
             "summary": title,
             "description": description,
-            "start": {"dateTime": date_and_time, "timeZone": "UTC"},
+            "start": {"dateTime": start_time_dt.isoformat(), "timeZone": "UTC"},
             "end": {
-                "dateTime": f"{date_and_time[:-6]}{int(date_and_time[-5:-3]) + (duration_minutes // 60):02}:{(int(date_and_time[-2:]) + (duration_minutes % 60)) % 60:02}Z",
+                "dateTime": end_time_dt.isoformat(),
                 "timeZone": "UTC",
             },
         }
@@ -176,17 +181,24 @@ tools = [check_calendar_availability, get_events_for_date, create_event_for_date
 llm_with_tools = llm.bind_tools(tools=tools)
 
 def initiate_chat(state):
-    with open("system_prompt.md", "r") as f:
-        system_prompt = f.read()
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            SystemMessagePromptTemplate.from_template(system_prompt),
-            MessagesPlaceholder(variable_name="messages")
-        ]
-    )
-    chain = prompt | llm_with_tools
-    response = chain.invoke(state['messages'])
-    return {"messages": [response]}
+    try:
+        with open("/Users/asantha/Desktop/voice_assistant/app/system_prompt.md", "r") as f:
+            system_prompt = f.read()
+        prompt = ChatPromptTemplate.from_messages(
+            messages = [
+                SystemMessage(content=system_prompt),
+                MessagesPlaceholder(variable_name="messages")
+            ]
+        )
+        chain = prompt | llm_with_tools
+        response = chain.invoke({"messages": state['messages']})
+        logger.info(f"Agent response: {response}")
+        return {
+            "messages": state['messages'] + [response]
+        }
+    except Exception as e:
+        logger.error(f"Error in initiate_chat: {e}")
+        raise e
 
 graph_builder = StateGraph(AgentState)
 graph_builder.add_node('agent_node', initiate_chat)

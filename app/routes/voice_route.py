@@ -47,6 +47,7 @@ async def voice_streamer(websocket: WebSocket):
                     "event_type": "audio_recieved",
                     "text": "Audio chunk received and processed"
                 })
+                audio_manager.is_streaming = True
 
             elif "text" in message:
                 data = json.loads(message["text"])

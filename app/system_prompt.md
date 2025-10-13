@@ -44,8 +44,8 @@ TOOL USAGE GUIDE:
    Example:
    get_events_for_date("2025-10-15")
    Returns: [
-     {"title": "Surgery", "start_time": "09:00", "end_time": "10:30"},
-     {"title": "Patient Check-up", "start_time": "11:00", "end_time": "11:30"}
+     \'{{"title": "Surgery", "start_time": "09:00", "end_time": "10:30"}}\',
+     \'{{"title": "Patient Check-up", "start_time": "11:00", "end_time": "11:30"}}\'
    ]
 
 2. check_calendar_availability(date_and_time: str, duration_minutes: int = 30) -> bool
@@ -71,13 +71,13 @@ TOOL USAGE GUIDE:
        title="Doctor Appointment",
        description="Reason: Regular check-up, Patient Name: John Doe, Patient Contact No: 1234567890"
    )
-   Returns: {
+   Returns: \'{{
      "appointment_id": "APT-12345",
      "status": "confirmed",
      "date": "2025-10-15",
      "start_time": "14:00",
      "end_time": "14:30"
-   }
+   }}\'
 
 
 FEW-SHOT EXAMPLES:

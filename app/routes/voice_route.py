@@ -2,10 +2,14 @@ import asyncio
 import base64
 import json
 import logging
+import tempfile
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from langchain.schema import HumanMessage
+import ulid
+import ffmpeg
 from app.agent_builder.agent import graph
 
-from app.utils.speech_utils import text_to_speech
+from app.utils.speech_utils import speech_to_text_stream, text_to_speech
 from app.voice_manager.audio_stream_manager import AudioStreamManager
 
 logging.basicConfig(
@@ -19,41 +23,69 @@ router = APIRouter()
 async def voice_streamer(websocket: WebSocket):
     await websocket.accept()
     audio_manager = AudioStreamManager(websocket)
-
+    audio_manager.is_streaming = True
+    chat_thread_id = None
     try:
+        stt_task = None
         transcript_buffer = []
         while True:
             message = await websocket.receive()
-
             if "bytes" in message:
                 audio_data = message["bytes"]
+                with tempfile.NamedTemporaryFile(delete=True, suffix=".webm") as webm_file:
+                    webm_path = webm_file.name
+                    webm_file.write(audio_data)  
+                    wav_path = webm_path.replace(".webm", ".wav")
+                    ffmpeg.input(webm_path).output(wav_path, format="wav", acodec="pcm_s16le", ac=1, ar="16000").run(quiet=True)
+                    with open(wav_path, "rb") as wav_file:
+                        audio_data = wav_file.read()
                 await audio_manager.add_audio_chunk(audio_data)
+                stt_task = asyncio.create_task(speech_to_text_stream(audio_manager, transcript_buffer))
+                while not stt_task.done():
+                    await asyncio.sleep(0.1)
+                await websocket.send_json({
+                    "event_type": "audio_recieved",
+                    "text": "Audio chunk received and processed"
+                })
+
             elif "text" in message:
                 data = json.loads(message["text"])
                 if data.get("event_type") == "start_listening":
                     await websocket.send_json({
                         "event_type": "listening",
-                        "message": "Listening started"
+                        "text": "Listening started"
+                    })
+                elif data.get("event_type") == "existing_chat":
+                    chat_thread_id = data.get("chatThreadId")
+                    await websocket.send_json({
+                        "event_type": "chat_thread_acknowledged",
+                        "chatThreadId": chat_thread_id
                     })
                 elif data.get("event_type") == "stop_listening":
+                    await audio_manager.stop_streaming()
+
                     if transcript_buffer:
-                        full_transcript = " ".join(transcript_buffer)
+                        full_transcript = " ".join(filter(None, transcript_buffer))
                         await websocket.send_json({
                             "event_type": "final_transcript",
-                            "message": full_transcript
+                            "text": full_transcript
                         })
+
+                        if chat_thread_id is None:
+                            chat_thread_id = ulid.new().str
 
                         agent_response = graph.invoke(
                             {
-                                "messages": [{"role": "user", "content": full_transcript}]
-                            }
+                                "messages": [HumanMessage(content=full_transcript)]
+                            },
+                            config={"configurable": {"thread_id": chat_thread_id}}
                         )
 
-                        response_text = agent_response['agent_node']['messages'][-1].content
+                        response_text = agent_response['messages'][-1].content
 
                         await websocket.send_json({
                             "event_type": "agent_response",
-                            "text": response_text
+                            "text": {"responseText": response_text, "chatThreadId": chat_thread_id}
                         })
 
                         audio_response = await text_to_speech(response_text)
@@ -64,7 +96,6 @@ async def voice_streamer(websocket: WebSocket):
                         })
 
                         transcript_buffer.clear()
-                    await audio_manager.stop_streaming()
                 elif data.get("event_type") == "transcript":
                     if data.get("is_final"):
                         transcript_buffer.append(data.get("text", ""))

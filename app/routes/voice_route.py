@@ -31,6 +31,7 @@ async def voice_streamer(websocket: WebSocket):
         while True:
             message = await websocket.receive()
             if "bytes" in message:
+                print('byte message recieved')
                 audio_data = message["bytes"]
                 with tempfile.NamedTemporaryFile(delete=True, suffix=".webm") as webm_file:
                     webm_path = webm_file.name
@@ -40,6 +41,7 @@ async def voice_streamer(websocket: WebSocket):
                     with open(wav_path, "rb") as wav_file:
                         audio_data = wav_file.read()
                 await audio_manager.add_audio_chunk(audio_data)
+                audio_manager.is_streaming = True
                 stt_task = asyncio.create_task(speech_to_text_stream(audio_manager, transcript_buffer))
                 while not stt_task.done():
                     await asyncio.sleep(0.1)
@@ -47,9 +49,9 @@ async def voice_streamer(websocket: WebSocket):
                     "event_type": "audio_recieved",
                     "text": "Audio chunk received and processed"
                 })
-                audio_manager.is_streaming = True
 
             elif "text" in message:
+                print('text message recieved')
                 data = json.loads(message["text"])
                 if data.get("event_type") == "start_listening":
                     await websocket.send_json({

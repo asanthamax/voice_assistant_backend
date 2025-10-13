@@ -1,5 +1,6 @@
 import logging
 from typing import Annotated, List, TypedDict
+import os
 from datetime import datetime, timedelta, timezone
 from langchain.prompts import MessagesPlaceholder
 from langchain.schema import HumanMessage, SystemMessage
@@ -16,6 +17,8 @@ logging.basicConfig(
     format='%(asctime)s :: %(levelname)s :: %(name)s :: %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+CALENDAR_ID = os.environ.get("GOOGLE_CALENDAR_ID", "primary")
 
 memory = InMemorySaver()
 
@@ -59,7 +62,7 @@ def check_calendar_availability(date_and_time: str, duration_minutes: int = 30) 
         event_result = (
             service.events()
             .list(
-                calendarId="primary",
+                calendarId=CALENDAR_ID,
                 timeMin=start_time_dt.isoformat() + "Z",
                 timeMax=end_time_dt.isoformat() + "Z",
                 singleEvents=True,
@@ -108,7 +111,7 @@ def get_events_for_date(date: str) -> List[Event]:
         event_result = (
             service.events()
             .list(
-                calendarId="primary",
+                calendarId=CALENDAR_ID,
                 timeMin=time_min,
                 timeMax=time_max,
                 singleEvents=True,
@@ -169,7 +172,7 @@ def create_event_for_datetime(date_and_time: str, title: str, description: str, 
                 "timeZone": "UTC",
             },
         }
-        created_event = service.events().insert(calendarId="primary", body=event).execute()
+        created_event = service.events().insert(calendarId=CALENDAR_ID, body=event).execute()
         logger.info(f"Event created: {created_event.get('htmlLink')}")
         return "Event created successfully"
     except HttpError as error:

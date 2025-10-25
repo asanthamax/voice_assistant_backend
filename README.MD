@@ -46,6 +46,7 @@ The project uses environment variables for configuration. Make sure to set:
 ```sh
 GOOGLE_APPLICATION_CREDENTIALS=/path/to/your/service-account.json
 GOOGLE_API_KEY=your_api_key
+GOOGLE_CALENDAR_ID=<your-email@gmail.com>
 ```
 
 ## Running the Application

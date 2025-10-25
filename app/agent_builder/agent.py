@@ -2,6 +2,7 @@ import logging
 from typing import Annotated, List, TypedDict
 import os
 from datetime import datetime, timedelta, timezone
+import pytz
 from langchain.prompts import MessagesPlaceholder
 from langchain.schema import HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import InMemorySaver
@@ -34,6 +35,18 @@ class Event(TypedDict):
     end_time: str
 
 @tool
+def get_current_year() -> int:
+    """
+        Returns the current year in integer format. for example 2025
+
+        Args:
+            None
+        Returns:
+            int: The current year
+    """
+    return datetime.now(timezone.utc).year
+
+@tool
 def check_calendar_availability(date_and_time: str, duration_minutes: int = 30) -> bool:
     """
     Checks if the given date and time conflicts with any existing events in the user's Google Calendar.
@@ -59,12 +72,17 @@ def check_calendar_availability(date_and_time: str, duration_minutes: int = 30) 
         service = build("calendar", "v3", cache_discovery=False)
         start_time_dt = datetime.fromisoformat(date_and_time)
         end_time_dt = start_time_dt + timedelta(minutes=duration_minutes)
+
+        calendar = service.calendars().get(calendarId=CALENDAR_ID).execute()
+        tz_str = calendar['timeZone']
+        tz = pytz.timezone(tz_str)
+
         event_result = (
             service.events()
             .list(
                 calendarId=CALENDAR_ID,
-                timeMin=start_time_dt.isoformat() + "Z",
-                timeMax=end_time_dt.isoformat() + "Z",
+                timeMin=tz.localize(start_time_dt).isoformat(),
+                timeMax=tz.localize(end_time_dt).isoformat(),
                 singleEvents=True,
                 orderBy="startTime",
             )
@@ -105,15 +123,19 @@ def get_events_for_date(date: str) -> List[Event]:
     try:
         logger.info(f"Fetching events for date: {date}")
         service = build("calendar", "v3", cache_discovery=False)
-        time_min = f"{date}T00:00:00Z"
-        time_max = f"{date}T23:59:59Z"
+        calendar = service.calendars().get(calendarId=CALENDAR_ID).execute()
+        tz_str = calendar['timeZone']
+        tz = pytz.timezone(tz_str)
+
+        time_min_dt = tz.localize(datetime.strptime(f"{date}T00:00:00", "%Y-%m-%dT%H:%M:%S"))
+        time_max_dt = tz.localize(datetime.strptime(f"{date}T23:59:59", "%Y-%m-%dT%H:%M:%S"))
 
         event_result = (
             service.events()
             .list(
                 calendarId=CALENDAR_ID,
-                timeMin=time_min,
-                timeMax=time_max,
+                timeMin=time_min_dt.isoformat(),
+                timeMax=time_max_dt.isoformat(),
                 singleEvents=True,
                 orderBy="startTime",
             )
@@ -163,13 +185,15 @@ def create_event_for_datetime(date_and_time: str, title: str, description: str, 
         service = build("calendar", "v3", cache_discovery=False)
         start_time_dt = datetime.fromisoformat(date_and_time)
         end_time_dt = start_time_dt + timedelta(minutes=duration_minutes)
+        calendar = service.calendars().get(calendarId=CALENDAR_ID).execute()
+        time_zone = calendar['timeZone']
         event = {
             "summary": title,
             "description": description,
-            "start": {"dateTime": start_time_dt.isoformat(), "timeZone": "UTC"},
+            "start": {"dateTime": start_time_dt.isoformat(), "timeZone": time_zone},
             "end": {
                 "dateTime": end_time_dt.isoformat(),
-                "timeZone": "UTC",
+                "timeZone": time_zone,
             },
         }
         created_event = service.events().insert(calendarId=CALENDAR_ID, body=event).execute()
@@ -179,7 +203,7 @@ def create_event_for_datetime(date_and_time: str, title: str, description: str, 
         logger.error(f"An error occurred: {error}")
         raise error
     
-tools = [check_calendar_availability, get_events_for_date, create_event_for_datetime]
+tools = [check_calendar_availability, get_events_for_date, create_event_for_datetime, get_current_year]
     
 llm_with_tools = llm.bind_tools(tools=tools)
 
